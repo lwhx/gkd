@@ -121,7 +121,7 @@ fun getGroupRawEnable(
         enable
     } else {
         null
-    } ?: group.enable ?: true
+    } ?: group.enable != false
 }
 
 data class RuleSummary(
@@ -131,8 +131,8 @@ data class RuleSummary(
     val appIdToGroups: ImmutableMap<String, ImmutableList<RawSubscription.RawAppGroup>> = persistentMapOf(),
     val appIdToAllGroups: ImmutableMap<String, ImmutableList<ResolvedAppGroup>> = persistentMapOf(),
 ) {
-    private val appSize = appIdToRules.keys.size
-    private val appGroupSize = appIdToGroups.values.sumOf { s -> s.size }
+    val appSize = appIdToRules.keys.size
+    val appGroupSize = appIdToGroups.values.sumOf { s -> s.size }
 
     val numText = if (globalGroups.size + appGroupSize > 0) {
         if (globalGroups.isNotEmpty()) {
@@ -190,7 +190,7 @@ val ruleSummaryFlow by lazy {
                 mutableMapOf<RawSubscription.RawGlobalGroup, List<GlobalRule>>()
             rawSubs.globalGroups.filter { g ->
                 (subGlobalSubsConfigs.find { c -> c.groupKey == g.key }?.enable
-                    ?: g.enable ?: true) && g.valid
+                        ?: g.enable != false) && g.valid
             }.forEach { groupRaw ->
                 val config = subGlobalSubsConfigs.find { c -> c.groupKey == groupRaw.key }
                 val g = ResolvedGlobalGroup(
@@ -285,13 +285,21 @@ val ruleSummaryFlow by lazy {
     }.flowOn(Dispatchers.Default).stateIn(appScope, SharingStarted.Eagerly, RuleSummary())
 }
 
+fun getSubsStatus(ruleSummary: RuleSummary, count: Int): String {
+    return if (count > 0) {
+        "${ruleSummary.numText}/${count}触发"
+    } else {
+        ruleSummary.numText
+    }
+}
+
 private fun loadSubs(id: Long): RawSubscription {
     val file = subsFolder.resolve("${id}.json")
     if (!file.exists()) {
         error("订阅文件不存在")
     }
     val subscription = try {
-        RawSubscription.parse(file.readText())
+        RawSubscription.parse(file.readText(), json5 = false)
     } catch (e: Exception) {
         throw Exception("订阅文件解析失败", e)
     }

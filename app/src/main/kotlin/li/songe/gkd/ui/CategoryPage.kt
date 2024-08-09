@@ -17,6 +17,7 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.UnfoldMore
+import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
@@ -50,6 +51,7 @@ import li.songe.gkd.data.CategoryConfig
 import li.songe.gkd.data.RawSubscription
 import li.songe.gkd.db.DbSet
 import li.songe.gkd.ui.component.TowLineText
+import li.songe.gkd.ui.component.updateDialogOptions
 import li.songe.gkd.ui.component.waitResult
 import li.songe.gkd.ui.style.EmptyHeight
 import li.songe.gkd.ui.style.itemPadding
@@ -59,6 +61,7 @@ import li.songe.gkd.util.LocalNavController
 import li.songe.gkd.util.ProfileTransitions
 import li.songe.gkd.util.findOption
 import li.songe.gkd.util.launchTry
+import li.songe.gkd.util.throttle
 import li.songe.gkd.util.toast
 import li.songe.gkd.util.updateSubscription
 
@@ -102,7 +105,16 @@ fun CategoryPage(subsItemId: Long) {
                 title = subsRaw?.name ?: subsItemId.toString(),
                 subTitle = "规则类别"
             )
-        }, actions = {})
+        }, actions = {
+            IconButton(onClick = throttle {
+                mainVm.dialogFlow.updateDialogOptions(
+                    title = "开关优先级",
+                    text = "规则手动配置 > 分类手动配置 > 分类默认 > 规则默认\n\n重置开关: 移除规则手动配置",
+                )
+            }) {
+                Icon(Icons.Outlined.Info, contentDescription = null)
+            }
+        })
     }, floatingActionButton = {
         if (editable) {
             FloatingActionButton(onClick = { showAddDlg = true }) {
@@ -121,8 +133,11 @@ fun CategoryPage(subsItemId: Long) {
                 Row(modifier = Modifier
                     .clickable { selectedExpanded = true }
                     .itemPadding(),
-                    verticalAlignment = Alignment.CenterVertically) {
-                    val size = categoriesGroups[category]?.size ?: 0
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+
+                    val groups = categoriesGroups[category] ?: emptyList()
+                    val size = groups.size
                     Column(modifier = Modifier.weight(1f)) {
                         Text(
                             text = category.name,
@@ -143,21 +158,39 @@ fun CategoryPage(subsItemId: Long) {
                             )
                         }
                     }
-                    if (editable) {
-                        var expanded by remember { mutableStateOf(false) }
-                        Box(
-                            modifier = Modifier.wrapContentSize(Alignment.TopStart)
+                    var expanded by remember { mutableStateOf(false) }
+                    Box(
+                        modifier = Modifier.wrapContentSize(Alignment.TopStart)
+                    ) {
+                        IconButton(onClick = {
+                            expanded = true
+                        }) {
+                            Icon(
+                                imageVector = Icons.Default.MoreVert,
+                                contentDescription = null,
+                            )
+                        }
+                        DropdownMenu(
+                            expanded = expanded,
+                            onDismissRequest = { expanded = false }
                         ) {
-                            IconButton(onClick = {
-                                expanded = true
-                            }) {
-                                Icon(
-                                    imageVector = Icons.Default.MoreVert,
-                                    contentDescription = null,
-                                )
-                            }
-                            DropdownMenu(expanded = expanded,
-                                onDismissRequest = { expanded = false }) {
+                            DropdownMenuItem(text = {
+                                Text(text = "重置开关")
+                            }, onClick = {
+                                expanded = false
+                                vm.viewModelScope.launchTry(Dispatchers.IO) {
+                                    val updatedList = DbSet.subsConfigDao.batchResetAppGroupEnable(
+                                        subsItemId,
+                                        groups
+                                    )
+                                    if (updatedList.isNotEmpty()) {
+                                        toast("成功重置 ${updatedList.size} 规则组开关")
+                                    } else {
+                                        toast("无可重置规则组")
+                                    }
+                                }
+                            })
+                            if (editable) {
                                 DropdownMenuItem(text = {
                                     Text(text = "编辑")
                                 }, onClick = {
@@ -171,7 +204,8 @@ fun CategoryPage(subsItemId: Long) {
                                     vm.viewModelScope.launchTry {
                                         mainVm.dialogFlow.waitResult(
                                             title = "删除类别",
-                                            text = "是否删除类别 ${category.name} ?"
+                                            text = "确定删除 ${category.name} ?",
+                                            error = true,
                                         )
                                         subsItem?.apply {
                                             updateSubscription(subsRaw!!.copy(categories = subsRaw!!.categories.filter { c -> c.key != category.key }))
@@ -257,7 +291,11 @@ fun CategoryPage(subsItemId: Long) {
                 placeholder = { Text(text = "请输入类别名称") },
                 singleLine = true
             )
-        }, onDismissRequest = { setEditNameCategory(null) }, dismissButton = {
+        }, onDismissRequest = {
+            if (source.isEmpty()) {
+                setEditNameCategory(null)
+            }
+        }, dismissButton = {
             TextButton(onClick = { setEditNameCategory(null) }) {
                 Text(text = "取消")
             }
@@ -300,7 +338,11 @@ fun CategoryPage(subsItemId: Long) {
                 placeholder = { Text(text = "请输入类别名称") },
                 singleLine = true
             )
-        }, onDismissRequest = { showAddDlg = false }, dismissButton = {
+        }, onDismissRequest = {
+            if (source.isEmpty()) {
+                showAddDlg = false
+            }
+        }, dismissButton = {
             TextButton(onClick = { showAddDlg = false }) {
                 Text(text = "取消")
             }

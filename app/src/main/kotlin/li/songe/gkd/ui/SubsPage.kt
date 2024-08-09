@@ -268,7 +268,8 @@ fun SubsPage(
                     onDelClick = throttle(fn = vm.viewModelScope.launchAsFn {
                         mainVm.dialogFlow.waitResult(
                             title = "删除规则组",
-                            text = "确定删除 ${appInfoCache[appRaw.id]?.name ?: appRaw.name ?: appRaw.id} 下所有规则组?"
+                            text = "确定删除 ${appInfoCache[appRaw.id]?.name ?: appRaw.name ?: appRaw.id} 下所有规则组?",
+                            error = true,
                         )
                         if (subsRaw != null && subsItem != null) {
                             updateSubscription(subsRaw.copy(apps = subsRaw.apps.filter { a -> a.id != appRaw.id }))
@@ -307,7 +308,11 @@ fun SubsPage(
                 modifier = Modifier.fillMaxWidth(),
                 placeholder = { Text(text = "请输入规则\n若应用规则已经存在则追加") },
             )
-        }, onDismissRequest = { showAddDlg = false }, confirmButton = {
+        }, onDismissRequest = {
+            if (source.isEmpty()) {
+                showAddDlg = false
+            }
+        }, confirmButton = {
             TextButton(onClick = {
                 val newAppRaw = try {
                     RawSubscription.parseRawApp(source)
@@ -401,7 +406,11 @@ fun SubsPage(
                     focusRequester.requestFocus()
                 }
             },
-            onDismissRequest = { editRawApp = null }, confirmButton = {
+            onDismissRequest = {
+                if (source.isEmpty()) {
+                    editRawApp = null
+                }
+            }, confirmButton = {
                 TextButton(onClick = {
                     try {
                         val newAppRaw = RawSubscription.parseRawApp(source)

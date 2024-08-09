@@ -36,30 +36,39 @@ fun Long.format(formatStr: String): String {
     return df.format(this)
 }
 
-private var globalThrottleLastTriggerTime = 0L
-private const val defaultThrottleInterval = 1000L
+data class ThrottleTimer(
+    private val interval: Long = 500L,
+    private var value: Long = 0L
+) {
+    fun expired(): Boolean {
+        val t = System.currentTimeMillis()
+        if (t - value > interval) {
+            value = t
+            return true
+        }
+        return false
+    }
+}
+
+private val defaultThrottleTimer by lazy { ThrottleTimer() }
 
 fun throttle(
-    interval: Long = defaultThrottleInterval,
+    timer: ThrottleTimer = defaultThrottleTimer,
     fn: (() -> Unit),
 ): (() -> Unit) {
     return {
-        val t = System.currentTimeMillis()
-        if (t - globalThrottleLastTriggerTime > interval) {
-            globalThrottleLastTriggerTime = t
+        if (timer.expired()) {
             fn.invoke()
         }
     }
 }
 
 fun <T> throttle(
-    interval: Long = defaultThrottleInterval,
+    timer: ThrottleTimer = defaultThrottleTimer,
     fn: ((T) -> Unit),
 ): ((T) -> Unit) {
     return {
-        val t = System.currentTimeMillis()
-        if (t - globalThrottleLastTriggerTime > interval) {
-            globalThrottleLastTriggerTime = t
+        if (timer.expired()) {
             fn.invoke(it)
         }
     }

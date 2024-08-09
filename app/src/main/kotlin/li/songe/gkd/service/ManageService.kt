@@ -6,6 +6,7 @@ import androidx.core.app.NotificationManagerCompat
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import li.songe.gkd.app
@@ -16,7 +17,7 @@ import li.songe.gkd.notif.abNotif
 import li.songe.gkd.notif.createNotif
 import li.songe.gkd.notif.defaultChannel
 import li.songe.gkd.util.clickCountFlow
-import li.songe.gkd.util.map
+import li.songe.gkd.util.getSubsStatus
 import li.songe.gkd.util.ruleSummaryFlow
 import li.songe.gkd.util.storeFlow
 
@@ -27,19 +28,22 @@ class ManageService : CompositionService({
     val scope = useScope()
     scope.launch {
         combine(
+            GkdAbService.isRunning,
+            storeFlow,
             ruleSummaryFlow,
             clickCountFlow,
-            storeFlow.map(scope) { it.enableService },
-            GkdAbService.isRunning
-        ) { allRules, clickCount, enableService, abRunning ->
+        ) { abRunning, store, ruleSummary, count ->
             if (!abRunning) return@combine "无障碍未授权"
-            if (!enableService) return@combine "服务已暂停"
-            allRules.numText + if (clickCount > 0) {
-                "/${clickCount}点击"
-            } else {
-                ""
+            if (!store.enableService) return@combine "服务已暂停"
+            if (store.useCustomNotifText) {
+                return@combine store.customNotifText
+                    .replace("\${i}", ruleSummary.globalGroups.size.toString())
+                    .replace("\${k}", ruleSummary.appSize.toString())
+                    .replace("\${u}", ruleSummary.appGroupSize.toString())
+                    .replace("\${n}", count.toString())
             }
-        }.stateIn(scope, SharingStarted.Eagerly, "").collect { text ->
+            return@combine getSubsStatus(ruleSummary, count)
+        }.debounce(500L).stateIn(scope, SharingStarted.Eagerly, "").collect { text ->
             createNotif(
                 context, defaultChannel.id, abNotif.copy(
                     text = text

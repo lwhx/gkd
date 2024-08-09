@@ -7,7 +7,6 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -257,7 +256,8 @@ fun GlobalRulePage(subsItemId: Long, focusGroupKey: Int? = null) {
                                         vm.viewModelScope.launchTry {
                                             mainVm.dialogFlow.waitResult(
                                                 title = "删除规则组",
-                                                text = "是否删除 ${group.name} ?"
+                                                text = "确定删除 ${group.name} ?",
+                                                error = true,
                                             )
                                             updateSubscription(
                                                 rawSubs!!.copy(
@@ -322,7 +322,11 @@ fun GlobalRulePage(subsItemId: Long, focusGroupKey: Int? = null) {
                 placeholder = { Text(text = "请输入规则组") },
                 maxLines = 10,
             )
-        }, onDismissRequest = { showAddDlg = false }, confirmButton = {
+        }, onDismissRequest = {
+            if (source.isEmpty()) {
+                showAddDlg = false
+            }
+        }, confirmButton = {
             TextButton(onClick = {
                 val newGroup = try {
                     RawSubscription.parseRawGlobalGroup(source)
@@ -403,7 +407,11 @@ fun GlobalRulePage(subsItemId: Long, focusGroupKey: Int? = null) {
                     focusRequester.requestFocus()
                 }
             },
-            onDismissRequest = { setEditGroupRaw(null) },
+            onDismissRequest = {
+                if (source.isEmpty()) {
+                    setEditGroupRaw(null)
+                }
+            },
             dismissButton = {
                 TextButton(onClick = { setEditGroupRaw(null) }) {
                     Text(text = "取消")
@@ -452,7 +460,6 @@ fun GlobalRulePage(subsItemId: Long, focusGroupKey: Int? = null) {
 
     if (showGroupItem != null) {
         AlertDialog(
-            modifier = Modifier.defaultMinSize(300.dp),
             onDismissRequest = { setShowGroupItem(null) },
             title = {
                 Text(text = "规则组详情")
@@ -478,6 +485,12 @@ fun GlobalRulePage(subsItemId: Long, focusGroupKey: Int? = null) {
                         Text(text = "查看图片")
                     }
                 }
-            })
+            },
+            dismissButton = {
+                TextButton(onClick = { setShowGroupItem(null) }) {
+                    Text(text = "关闭")
+                }
+            }
+        )
     }
 }

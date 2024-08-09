@@ -23,7 +23,7 @@ import androidx.compose.material.icons.automirrored.filled.FormatListBulleted
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.MoreVert
-import androidx.compose.material.icons.filled.Share
+import androidx.compose.material.icons.filled.Upload
 import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
@@ -32,7 +32,6 @@ import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import androidx.compose.material3.LocalTextStyle
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -53,7 +52,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.viewModelScope
@@ -141,17 +139,23 @@ fun useSubsManagePage(): ScaffoldExt {
                 value = link,
                 onValueChange = { link = it.trim() },
                 maxLines = 8,
-                textStyle = LocalTextStyle.current.copy(fontSize = 14.sp),
                 modifier = Modifier.fillMaxWidth(),
                 placeholder = {
-                    Text(
-                        text = "请输入订阅链接",
-                        style = LocalTextStyle.current.copy(fontSize = 14.sp)
-                    )
+                    Text(text = "请输入订阅链接")
                 },
                 isError = link.isNotEmpty() && !URLUtil.isNetworkUrl(link),
             )
-        }, onDismissRequest = { showAddLinkDialog = false }, confirmButton = {
+        }, onDismissRequest = {
+            if (link.isEmpty()) {
+                showAddLinkDialog = false
+            }
+        }, dismissButton = {
+            TextButton(onClick = {
+                showAddLinkDialog = false
+            }) {
+                Text(text = "取消")
+            }
+        }, confirmButton = {
             TextButton(enabled = link.isNotBlank(), onClick = {
                 if (!URLUtil.isNetworkUrl(link)) {
                     toast("非法链接")
@@ -172,7 +176,7 @@ fun useSubsManagePage(): ScaffoldExt {
                     vm.addSubsFromUrl(url = link)
                 }
             }) {
-                Text(text = "添加")
+                Text(text = "确认")
             }
         })
     }
@@ -212,10 +216,14 @@ fun useSubsManagePage(): ScaffoldExt {
                         selectedIds
                     }
                     if (canDeleteIds.isNotEmpty()) {
+                        val text = "确定删除所选 ${canDeleteIds.size} 个订阅?".let {
+                            if (selectedIds.contains(LOCAL_SUBS_ID)) "$it\n\n注: 不包含本地订阅" else it
+                        }
                         IconButton(onClick = vm.viewModelScope.launchAsFn {
                             mainVm.dialogFlow.waitResult(
                                 title = "删除订阅",
-                                text = "是否删除所选 ${canDeleteIds.size} 个订阅?\n\n注: 不包含本地订阅",
+                                text = text,
+                                error = true,
                             )
                             deleteSubscription(*canDeleteIds.toLongArray())
                             selectedIds = selectedIds - canDeleteIds
@@ -233,7 +241,7 @@ fun useSubsManagePage(): ScaffoldExt {
                         vm.showShareDataIdsFlow.value = selectedIds
                     }) {
                         Icon(
-                            imageVector = Icons.Default.Share,
+                            imageVector = Icons.Default.Upload,
                             contentDescription = null,
                         )
                     }
@@ -450,7 +458,7 @@ private fun ShareDataDialog(vm: HomeVm) {
                     .fillMaxWidth()
                     .padding(16.dp)
                 Text(
-                    text = "分享数据", modifier = Modifier
+                    text = "分享到其他应用", modifier = Modifier
                         .clickable(onClick = throttle {
                             vm.showShareDataIdsFlow.value = null
                             vm.viewModelScope.launchTry(Dispatchers.IO) {

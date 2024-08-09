@@ -7,7 +7,6 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -27,6 +26,7 @@ import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.LocalTextStyle
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
@@ -51,7 +51,6 @@ import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.viewModelScope
 import com.blankj.utilcode.util.ClipboardUtils
@@ -159,6 +158,14 @@ fun AppItemPage(
                 Spacer(modifier = Modifier.height(10.dp))
             }
             itemsIndexed(appRaw.groups, { i, g -> i.toString() + g.key }) { _, group ->
+                val subsConfig = subsConfigs.find { it.groupKey == group.key }
+                val groupEnable = getGroupRawEnable(
+                    group,
+                    subsConfig,
+                    groupToCategoryMap[group],
+                    categoryConfigs.find { c -> c.categoryKey == groupToCategoryMap[group]?.key }
+                )
+
                 Row(
                     modifier = Modifier
                         .background(
@@ -265,6 +272,19 @@ fun AppItemPage(
                                     expanded = false
                                 },
                             )
+                            if (subsConfig?.enable != null) {
+                                DropdownMenuItem(
+                                    text = {
+                                        Text(text = "重置开关")
+                                    },
+                                    onClick = {
+                                        expanded = false
+                                        vm.viewModelScope.launchTry(Dispatchers.IO) {
+                                            DbSet.subsConfigDao.insert(subsConfig.copy(enable = null))
+                                        }
+                                    },
+                                )
+                            }
                             if (editable && subsItem != null && subsRaw != null) {
                                 DropdownMenuItem(
                                     text = {
@@ -275,7 +295,8 @@ fun AppItemPage(
                                         vm.viewModelScope.launchTry {
                                             mainVm.dialogFlow.waitResult(
                                                 title = "删除规则组",
-                                                text = "确定删除规则组 ${group.name} ?"
+                                                text = "确定删除规则组 ${group.name} ?",
+                                                error = true,
                                             )
                                             val newSubsRaw = subsRaw.copy(
                                                 apps = subsRaw.apps
@@ -304,14 +325,6 @@ fun AppItemPage(
                     }
 
                     Spacer(modifier = Modifier.width(10.dp))
-
-                    val groupEnable = getGroupRawEnable(
-                        group,
-                        subsConfigs.find { c -> c.groupKey == group.key },
-                        groupToCategoryMap[group],
-                        categoryConfigs.find { c -> c.categoryKey == groupToCategoryMap[group]?.key }
-                    )
-                    val subsConfig = subsConfigs.find { it.groupKey == group.key }
                     Switch(
                         checked = groupEnable, modifier = Modifier,
                         onCheckedChange = vm.viewModelScope.launchAsFn { enable ->
@@ -344,7 +357,6 @@ fun AppItemPage(
 
     showGroupItem?.let { showGroupItemVal ->
         AlertDialog(
-            modifier = Modifier.defaultMinSize(300.dp),
             onDismissRequest = { setShowGroupItem(null) },
             title = {
                 Text(text = "规则组详情")
@@ -352,8 +364,10 @@ fun AppItemPage(
             text = {
                 Column {
                     Text(text = showGroupItemVal.name)
-                    Spacer(modifier = Modifier.height(10.dp))
-                    Text(text = showGroupItemVal.desc ?: "")
+                    if (showGroupItemVal.desc != null) {
+                        Spacer(modifier = Modifier.height(10.dp))
+                        Text(text = showGroupItemVal.desc)
+                    }
                 }
             },
             confirmButton = {
@@ -371,7 +385,15 @@ fun AppItemPage(
                         Text(text = "查看图片")
                     }
                 }
-            })
+            },
+            dismissButton = {
+                TextButton(onClick = throttle {
+                    setShowGroupItem(null)
+                }) {
+                    Text(text = "关闭")
+                }
+            }
+        )
     }
 
     if (editGroupRaw != null && subsItem != null) {
@@ -396,7 +418,11 @@ fun AppItemPage(
                     focusRequester.requestFocus()
                 }
             },
-            onDismissRequest = { setEditGroupRaw(null) },
+            onDismissRequest = {
+                if (source.isEmpty()) {
+                    setEditGroupRaw(null)
+                }
+            },
             dismissButton = {
                 TextButton(onClick = { setEditGroupRaw(null) }) {
                     Text(text = "取消")
@@ -477,18 +503,22 @@ fun AppItemPage(
                         .focusRequester(focusRequester),
                     placeholder = {
                         Text(
-                            fontSize = 12.sp,
-                            text = "请填入需要禁用的 activityId\n以换行或英文逗号分割"
+                            text = "请填入需要禁用的 activityId\n以换行或英文逗号分割",
+                            style = LocalTextStyle.current.copy(fontSize = MaterialTheme.typography.bodySmall.fontSize)
                         )
                     },
                     maxLines = 10,
-                    textStyle = MaterialTheme.typography.bodySmall.copy(fontSize = 12.sp)
+                    textStyle = LocalTextStyle.current.copy(fontSize = MaterialTheme.typography.bodySmall.fontSize)
                 )
                 LaunchedEffect(null) {
                     focusRequester.requestFocus()
                 }
             },
-            onDismissRequest = { setExcludeGroupRaw(null) },
+            onDismissRequest = {
+                if (source.isEmpty()) {
+                    setExcludeGroupRaw(null)
+                }
+            },
             dismissButton = {
                 TextButton(onClick = { setExcludeGroupRaw(null) }) {
                     Text(text = "取消")
@@ -532,7 +562,11 @@ fun AppItemPage(
                 placeholder = { Text(text = "请输入规则组\n可以是APP规则\n也可以是单个规则组") },
                 maxLines = 10,
             )
-        }, onDismissRequest = { showAddDlg = false }, confirmButton = {
+        }, onDismissRequest = {
+            if (source.isEmpty()) {
+                showAddDlg = false
+            }
+        }, confirmButton = {
             TextButton(onClick = {
                 val newAppRaw = try {
                     RawSubscription.parseRawApp(source)

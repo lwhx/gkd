@@ -16,6 +16,8 @@ import com.dylanc.activityresult.launcher.StartActivityLauncher
 import com.ramcosta.composedestinations.DestinationsNavHost
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import li.songe.gkd.composition.CompositionActivity
 import li.songe.gkd.composition.CompositionExt.useLifeCycleLog
@@ -36,6 +38,7 @@ import li.songe.gkd.util.LocalNavController
 import li.songe.gkd.util.LocalPickContentLauncher
 import li.songe.gkd.util.UpgradeDialog
 import li.songe.gkd.util.initFolder
+import li.songe.gkd.util.launchTry
 import li.songe.gkd.util.map
 import li.songe.gkd.util.storeFlow
 
@@ -87,23 +90,39 @@ class MainActivity : CompositionActivity({
         super.onResume()
 
         // 每次切换页面更新记录桌面 appId
-        updateLauncherAppId()
+        appScope.launchTry(Dispatchers.IO) {
+            updateLauncherAppId()
+        }
 
         // 在某些机型由于未知原因创建失败, 在此保证每次界面切换都能重新检测创建
-        appScope.launch(Dispatchers.IO) {
+        appScope.launchTry(Dispatchers.IO) {
             initFolder()
         }
 
-        appScope.launch(Dispatchers.IO) {
+        // 用户在系统权限设置中切换权限后再切换回应用时能及时更新状态
+        appScope.launchTry(Dispatchers.IO) {
             updatePermissionState()
         }
 
-        // 进程崩溃后重新打开应用, 由于存在缓存导致服务状态可能不正确, 在此保证每次界面切换都能重新刷新状态
-        appScope.launch(Dispatchers.IO) {
+        // 由于某些机型的进程存在 安装缓存/崩溃缓存 导致服务状态可能不正确, 在此保证每次界面切换都能重新刷新状态
+        appScope.launchTry(Dispatchers.IO) {
             updateServiceRunning()
         }
     }
+
+    override fun onStart() {
+        super.onStart()
+        activityVisibleFlow.update { it + 1 }
+    }
+
+    override fun onStop() {
+        super.onStop()
+        activityVisibleFlow.update { it - 1 }
+    }
 }
+
+private val activityVisibleFlow by lazy { MutableStateFlow(0) }
+fun isActivityVisible() = activityVisibleFlow.value > 0
 
 fun Activity.navToMainActivity() {
     val intent = this.intent?.cloneFilter()
@@ -115,6 +134,7 @@ fun Activity.navToMainActivity() {
     }
     finish()
 }
+
 
 private fun updateServiceRunning() {
     ManageService.isRunning.value = ServiceUtils.isServiceRunning(ManageService::class.java)
